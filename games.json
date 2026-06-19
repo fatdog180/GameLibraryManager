@@ -1,12 +1,18 @@
 [
   {
-    "Id": "c804df17-6607-4bc4-9c54-a4fb6293fd4b",
-    "Title": "BlueArchive",
+    "Id": "d0abe509-7c52-448e-9a43-d79f17ab6e09",
+    "Code": "3557620",
+    "Title": "\u851A\u85CD\u6A94\u6848",
+    "Circle": "NEXON Games",
     "Platform": "Steam",
     "ExePath": "D:\\SteamLibrary\\steamapps\\common\\BlueArchive\\BlueArchive.exe",
-    "CoverImagePath": "",
+    "CoverImagePath": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3557620/cc16808906f93d459f96cfa142af9a0568fb7516/header_tchinese.jpg?t=1779773548",
     "IsFavorite": false,
     "Notes": "",
-    "LastPlayed": "2026-06-20T02:07:13.8731897+08:00"
+    "Tags": [],
+    "ReleaseDate": "2025 \u5E74 7 \u6708 3 \u65E5",
+    "LastUpdated": "\u7121",
+    "LastPlayed": null,
+    "TotalPlayTime": 0
   }
 ]
