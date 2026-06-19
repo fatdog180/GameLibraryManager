@@ -14,7 +14,7 @@ namespace GameLibraryApp
         {
             var handler = new HttpClientHandler { AllowAutoRedirect = true };
             client = new HttpClient(handler);
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
         }
 
         public static async Task<GameItem?> FetchAsync(string code, string platform)
@@ -45,22 +45,15 @@ namespace GameLibraryApp
                         if (data.TryGetProperty("release_date", out JsonElement rd))
                             item.ReleaseDate = rd.GetProperty("date").GetString() ?? "1970-01-01";
 
-                        // === 【補齊：對齊 Python 腳本，透過 API 獲取最新新聞時間作為最後更新日】 ===
-                        try
+                        // === 【新增：抓取 Steam 遊戲類型標籤】 ===
+                        if (data.TryGetProperty("genres", out JsonElement genres))
                         {
-                            string api_url = $"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={appId}&count=1";
-                            string apiJson = await client.GetStringAsync(api_url);
-                            using JsonDocument apiDoc = JsonDocument.Parse(apiJson);
-                            if (apiDoc.RootElement.TryGetProperty("appnews", out JsonElement appnews) &&
-                                appnews.TryGetProperty("newsitems", out JsonElement newsitems) &&
-                                newsitems.GetArrayLength() > 0)
+                            foreach (var g in genres.EnumerateArray())
                             {
-                                long timestamp = newsitems[0].GetProperty("date").GetInt64();
-                                DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).LocalDateTime;
-                                item.LastUpdated = dateTime.ToString("yyyy-MM-dd");
+                                string tag = g.GetProperty("description").GetString() ?? "";
+                                if (!string.IsNullOrEmpty(tag)) item.Tags.Add(tag);
                             }
                         }
-                        catch { item.LastUpdated = "無"; }
 
                         return item;
                     }
@@ -92,12 +85,17 @@ namespace GameLibraryApp
                     var dateMatch = Regex.Match(html, @"<th>(?:販賣日|販売日)</th>.*?<td>.*?(\d{4}年\d{2}月\d{2}日)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
                     if (dateMatch.Success) item.ReleaseDate = dateMatch.Groups[1].Value.Trim();
 
-                    // === 【補齊：網頁 Outline 表格的「更新情報」欄位正則匹配】 ===
-                    var updateMatch = Regex.Match(html, @"<th>(?:更新情報|最終更新日|更新日期)</th>.*?<td>.*?(\d{4}年\d{2}月\d{2}日)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-                    if (updateMatch.Success)
-                        item.LastUpdated = updateMatch.Groups[1].Value.Trim();
-                    else
-                        item.LastUpdated = "無";
+                    // === 【新增：抓取 DLsite 分類標籤】 ===
+                    var genreMatch = Regex.Match(html, @"<th>(?:ジャンル|分類|Genre)</th>.*?<td>(.*?)</td>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    if (genreMatch.Success)
+                    {
+                        var aMatches = Regex.Matches(genreMatch.Groups[1].Value, @"<a[^>]*>(.*?)</a>", RegexOptions.IgnoreCase);
+                        foreach (Match m in aMatches)
+                        {
+                            string tag = Regex.Replace(m.Groups[1].Value, "<.*?>", "").Trim();
+                            if (!string.IsNullOrEmpty(tag) && !item.Tags.Contains(tag)) item.Tags.Add(tag);
+                        }
+                    }
 
                     return item;
                 }

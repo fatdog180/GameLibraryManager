@@ -51,8 +51,6 @@ namespace GameLibraryApp
 
             Label lblPath = new Label { Text = "執行檔路徑：", Location = new Point(30, 225), AutoSize = true };
             txtExePath = new TextBox { Location = new Point(130, 222), Width = 220, BackColor = Color.FromArgb(23, 26, 33), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, ReadOnly = true };
-
-            // 瀏覽按鈕本體
             btnBrowse = new Button { Text = "瀏覽...", Location = new Point(360, 220), Width = 80, BackColor = Color.FromArgb(42, 113, 212), FlatStyle = FlatStyle.Flat };
             btnBrowse.FlatAppearance.BorderSize = 0;
             btnBrowse.Click += BtnBrowse_Click;
@@ -68,7 +66,6 @@ namespace GameLibraryApp
             btnSave.FlatAppearance.BorderSize = 0;
             btnSave.Click += BtnSave_Click;
 
-            // === 【修正】: 將 btnBrowse 重新加入陣列中 ===
             this.Controls.AddRange(new Control[] { lblCode, txtCode, btnFetch, lblTitle, txtTitle, lblPlatform, cmbPlatform, lblCircle, txtCircle, lblPath, txtExePath, btnBrowse, lblNotes, txtNotes, btnCancel, btnSave });
         }
 
@@ -111,7 +108,10 @@ namespace GameLibraryApp
                 txtTitle.Text = fetchedGame.Title;
                 txtCircle.Text = fetchedGame.Circle;
                 NewGame.ReleaseDate = fetchedGame.ReleaseDate;
-                NewGame.LastUpdated = fetchedGame.LastUpdated;
+
+                // === 【核心修改：接收抓取到的 Tags 陣列】 ===
+                NewGame.Tags = fetchedGame.Tags;
+
                 NewGame.CoverImagePath = fetchedGame.CoverImagePath;
                 MessageBox.Show("成功解析並對齊網路資料！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

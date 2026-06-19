@@ -18,6 +18,10 @@ namespace GameLibraryApp
         private Label lblStats = null!;
         private TextBox txtSearch = null!;
         private ComboBox cmbCircle = null!;
+
+        // === 【新增標籤篩選選單】 ===
+        private ComboBox cmbTag = null!;
+
         private ComboBox cmbSort = null!;
 
         private FlowLayoutPanel gamesFlowPanel = null!;
@@ -45,6 +49,10 @@ namespace GameLibraryApp
             categoryListBox.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
             txtSearch.TextChanged += (s, e) => FilterAndRefreshGrid();
             cmbCircle.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
+
+            // 綁定標籤過濾事件
+            cmbTag.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
+
             cmbSort.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
 
             gamesFlowPanel.SizeChanged += (s, e) => CenterFlowPanelCards();
@@ -52,7 +60,7 @@ namespace GameLibraryApp
 
         private void SetupCustomUI()
         {
-            this.Text = "PixelVault 數位遊戲館藏儀表板 v9.0 (Ultimate Stable Edition)";
+            this.Text = "PixelVault 數位遊戲館藏儀表板 v10 (Tags System Edition)";
             this.Size = new Size(1280, 760);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(18, 18, 18);
@@ -117,25 +125,52 @@ namespace GameLibraryApp
             detailsPanel.Controls.Add(lblGameTitle);
             detailsPanel.Controls.Add(btnLaunch);
 
+            // === 【頂部控制列重構】：加入標籤下拉選單，並精密重新分配寬度座標 ===
             topHeaderPanel = new Panel { Height = 75, Dock = DockStyle.Top, BackColor = Color.FromArgb(25, 25, 26), Padding = new Padding(15, 10, 15, 10) };
-            lblStats = new Label { Text = "載入中...", Font = new Font("Microsoft JhengHei", 9), ForeColor = Color.FromArgb(136, 136, 136), Location = new Point(10, 18), Size = new Size(140, 40) };
+            lblStats = new Label { Text = "載入中...", Font = new Font("Microsoft JhengHei", 9), ForeColor = Color.FromArgb(136, 136, 136), Location = new Point(10, 18), Size = new Size(120, 40) };
 
-            txtSearch = new TextBox { PlaceholderText = "搜尋 代碼 / 遊戲名稱...", Width = 160, Location = new Point(160, 22), BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft JhengHei", 9) };
-            cmbCircle = new ComboBox { Width = 170, Location = new Point(340, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
-            cmbSort = new ComboBox { Width = 190, Location = new Point(530, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            txtSearch = new TextBox { PlaceholderText = "搜尋代碼/名稱...", Width = 140, Location = new Point(130, 22), BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft JhengHei", 9) };
+            cmbCircle = new ComboBox { Width = 140, Location = new Point(280, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+
+            cmbTag = new ComboBox { Width = 140, Location = new Point(430, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+
+            cmbSort = new ComboBox { Width = 160, Location = new Point(580, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
 
             cmbSort.Items.AddRange(new string[] { "依 遊戲名稱 排序", "依 發售日期 (新 ➔ 舊)", "依 發售日期 (舊 ➔ 新)", "依 最後遊玩 排序", "依 總遊玩時數 排序" });
             cmbSort.SelectedIndex = 0;
-            topHeaderPanel.Controls.AddRange(new Control[] { lblStats, txtSearch, cmbCircle, cmbSort });
+            topHeaderPanel.Controls.AddRange(new Control[] { lblStats, txtSearch, cmbCircle, cmbTag, cmbSort });
 
             gamesFlowPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 18, 18), AutoScroll = true, BorderStyle = BorderStyle.None };
 
             gameContextMenu = new ContextMenuStrip { BackColor = Color.FromArgb(30, 30, 30), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+
+            ToolStripMenuItem menuOpenFolder = new ToolStripMenuItem("📂 開啟所在資料夾");
+            menuOpenFolder.Click += (s, e) =>
+            {
+                if (selectedGame != null && !string.IsNullOrWhiteSpace(selectedGame.ExePath))
+                {
+                    if (File.Exists(selectedGame.ExePath))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "explorer.exe",
+                            Arguments = $"/select,\"{selectedGame.ExePath}\"",
+                            UseShellExecute = true
+                        });
+                    }
+                    else
+                    {
+                        MessageBox.Show("找不到執行檔！可能遊戲已被移動或刪除。", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            };
+
             ToolStripMenuItem menuFav = new ToolStripMenuItem("⭐ 移入/移出收藏夾");
             menuFav.Click += (s, e) => { if (selectedGame != null) { selectedGame.IsFavorite = !selectedGame.IsFavorite; GameDataManager.SaveGames(allGames); FilterAndRefreshGrid(); } };
             ToolStripMenuItem menuDel = new ToolStripMenuItem("❌ 從資料庫永久移除");
             menuDel.Click += (s, e) => { if (selectedGame != null && MessageBox.Show("確定要將此遊戲移除館藏嗎？", "刪除確認", MessageBoxButtons.YesNo) == DialogResult.Yes) { allGames.Remove(selectedGame); GameDataManager.SaveGames(allGames); LoadGameData(); } };
-            gameContextMenu.Items.AddRange(new ToolStripItem[] { menuFav, menuDel });
+
+            gameContextMenu.Items.AddRange(new ToolStripItem[] { menuOpenFolder, new ToolStripSeparator(), menuFav, menuDel });
 
             this.Controls.AddRange(new Control[] { gamesFlowPanel, topHeaderPanel, detailsPanel, sidebarPanel });
             gamesFlowPanel.BringToFront();
@@ -144,15 +179,20 @@ namespace GameLibraryApp
         private void LoadGameData()
         {
             allGames = GameDataManager.LoadGames();
-            var circles = allGames.Select(g => g.Circle)
-                                  .Where(c => c != "未知廠商" && c != "Unknown")
-                                  .Distinct()
-                                  .OrderBy(c => c)
-                                  .ToList();
+
+            // 初始化廠商選單
+            var circles = allGames.Select(g => g.Circle).Where(c => c != "未知廠商" && c != "Unknown").Distinct().OrderBy(c => c).ToList();
             cmbCircle.Items.Clear();
-            cmbCircle.Items.Add("所有社團/廠商");
+            cmbCircle.Items.Add("所有廠商");
             foreach (var c in circles) cmbCircle.Items.Add(c);
             cmbCircle.SelectedIndex = 0;
+
+            // === 【新增：動態載入標籤下拉選單】 ===
+            var tags = allGames.SelectMany(g => g.Tags).Distinct().OrderBy(t => t).ToList();
+            cmbTag.Items.Clear();
+            cmbTag.Items.Add("所有標籤");
+            foreach (var t in tags) cmbTag.Items.Add(t);
+            cmbTag.SelectedIndex = 0;
 
             FilterAndRefreshGrid();
         }
@@ -167,7 +207,6 @@ namespace GameLibraryApp
                 gamesFlowPanel.AutoScroll = false;
                 gamesFlowPanel.SuspendLayout();
 
-                // === 【終極修復 1】：永遠用總 Width，且強制扣除滾動條與安全距離 ===
                 int absoluteWidth = gamesFlowPanel.Width;
                 if (absoluteWidth <= 0 || gamesFlowPanel.Controls.Count == 0) return;
 
@@ -175,7 +214,6 @@ namespace GameLibraryApp
                 int marginPerCard = 20;
                 int totalMarginWidth = columns * marginPerCard;
 
-                // 預留系統標準滾動條寬度與 10px 安全緩衝，確保算出來的寬度絕對不會溢位
                 int safeWidth = absoluteWidth - SystemInformation.VerticalScrollBarWidth - 10;
 
                 int newCardWidth = (safeWidth - totalMarginWidth) / columns;
@@ -212,7 +250,6 @@ namespace GameLibraryApp
                 int actualUsedWidth = columns * (newCardWidth + marginPerCard);
                 int paddingLeft = Math.Max(0, (safeWidth - actualUsedWidth) / 2);
 
-                // 右側 padding 給 0，因為安全距離已經幫忙擋住了
                 gamesFlowPanel.Padding = new Padding(paddingLeft, 15, 0, 15);
             }
             finally
@@ -239,6 +276,13 @@ namespace GameLibraryApp
 
             if (cmbCircle.SelectedIndex > 0 && cmbCircle.SelectedItem != null)
                 query = query.Where(g => g.Circle == cmbCircle.SelectedItem.ToString());
+
+            // === 【新增：標籤核心篩選邏輯】 ===
+            if (cmbTag.SelectedIndex > 0 && cmbTag.SelectedItem != null)
+            {
+                string selectedTag = cmbTag.SelectedItem.ToString() ?? "";
+                query = query.Where(g => g.Tags.Contains(selectedTag));
+            }
 
             lblStats.Text = $"遊戲總數: {query.Count()} 款\n資料庫狀態: 連線正常";
 
@@ -276,7 +320,18 @@ namespace GameLibraryApp
                     }
                 }
 
-                Label lblTitle = new Label { Name = "lblTitle", Text = game.IsFavorite ? $"⭐ {game.Title}" : game.Title, Size = new Size(190, 40), Location = new Point(10, 160), Font = new Font("Microsoft JhengHei", 9, FontStyle.Bold), ForeColor = Color.White };
+                Label lblTitle = new Label
+                {
+                    Name = "lblTitle",
+                    Text = game.IsFavorite ? $"⭐ {game.Title}" : game.Title,
+                    Size = new Size(190, 40),
+                    Location = new Point(10, 160),
+                    Font = new Font("Microsoft JhengHei", 9, FontStyle.Bold),
+                    ForeColor = Color.White,
+                    AutoSize = false,
+                    AutoEllipsis = true
+                };
+
                 Label lblCirc = new Label { Name = "lblCirc", Text = game.Circle, Size = new Size(190, 20), Location = new Point(10, 205), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.Gray };
                 Label lblTime = new Label { Name = "lblTime", Text = $"時數: {game.TotalPlayTime} 分鐘", Size = new Size(190, 15), Location = new Point(10, 225), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.FromArgb(3, 218, 198) };
 
@@ -287,9 +342,11 @@ namespace GameLibraryApp
                     lblPlatform.Text = $"代碼: {game.Code} | 平台: {game.Platform}";
 
                     string uiReleaseDate = (game.ReleaseDate == "1970-01-01") ? "未知" : game.ReleaseDate;
-                    string uiLastUpdated = (string.IsNullOrEmpty(game.LastUpdated) || game.LastUpdated == "None") ? "無" : game.LastUpdated;
 
-                    lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後更新：{uiLastUpdated}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n個人備忘：\n{game.Notes}";
+                    // === 【資訊面板顯示更新】：拔除更新日期，並漂亮地將標籤展開 ===
+                    string displayTags = game.Tags.Count > 0 ? string.Join(", ", game.Tags) : "無標籤";
+
+                    lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n遊戲標籤：\n{displayTags}\n\n個人備忘：\n{game.Notes}";
                     btnLaunch.Visible = true;
                 };
 
@@ -378,7 +435,6 @@ namespace GameLibraryApp
                 {
                     GameItem newGame = addForm.NewGame;
 
-                    // === 【終極修復 2】：在寫入前嚴格防堵重複加入的相同代碼 ===
                     if (allGames.Any(g => g.Code == newGame.Code))
                     {
                         MessageBox.Show($"遊戲庫中已經存在代碼為「{newGame.Code}」的遊戲囉！\n系統已自動攔截重複匯入。", "重複匯入攔截", MessageBoxButtons.OK, MessageBoxIcon.Warning);
