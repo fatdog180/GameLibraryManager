@@ -18,10 +18,7 @@ namespace GameLibraryApp
         private Label lblStats = null!;
         private TextBox txtSearch = null!;
         private ComboBox cmbCircle = null!;
-
-        // === 【新增標籤篩選選單】 ===
         private ComboBox cmbTag = null!;
-
         private ComboBox cmbSort = null!;
 
         private FlowLayoutPanel gamesFlowPanel = null!;
@@ -49,10 +46,7 @@ namespace GameLibraryApp
             categoryListBox.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
             txtSearch.TextChanged += (s, e) => FilterAndRefreshGrid();
             cmbCircle.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
-
-            // 綁定標籤過濾事件
             cmbTag.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
-
             cmbSort.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
 
             gamesFlowPanel.SizeChanged += (s, e) => CenterFlowPanelCards();
@@ -60,7 +54,7 @@ namespace GameLibraryApp
 
         private void SetupCustomUI()
         {
-            this.Text = "PixelVault 數位遊戲館藏儀表板 v10 (Tags System Edition)";
+            this.Text = "PixelVault 數位遊戲館藏儀表板 v10 (Ultimate UX Edition)";
             this.Size = new Size(1280, 760);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(18, 18, 18);
@@ -125,16 +119,17 @@ namespace GameLibraryApp
             detailsPanel.Controls.Add(lblGameTitle);
             detailsPanel.Controls.Add(btnLaunch);
 
-            // === 【頂部控制列重構】：加入標籤下拉選單，並精密重新分配寬度座標 ===
+            // === 【頂部控制列精密佈局修正】：精密調整座標與高度，防溢位切割 ===
             topHeaderPanel = new Panel { Height = 75, Dock = DockStyle.Top, BackColor = Color.FromArgb(25, 25, 26), Padding = new Padding(15, 10, 15, 10) };
-            lblStats = new Label { Text = "載入中...", Font = new Font("Microsoft JhengHei", 9), ForeColor = Color.FromArgb(136, 136, 136), Location = new Point(10, 18), Size = new Size(120, 40) };
 
-            txtSearch = new TextBox { PlaceholderText = "搜尋代碼/名稱...", Width = 140, Location = new Point(130, 22), BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft JhengHei", 9) };
-            cmbCircle = new ComboBox { Width = 140, Location = new Point(280, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            // 💡 修正 1：將 lblStats 高度撐高至 45px，防止兩行文字切斷
+            lblStats = new Label { Text = "載入中...", Font = new Font("Microsoft JhengHei", 9), ForeColor = Color.FromArgb(136, 136, 136), Location = new Point(15, 15), Size = new Size(130, 45), TextAlign = ContentAlignment.MiddleLeft };
 
-            cmbTag = new ComboBox { Width = 140, Location = new Point(430, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
-
-            cmbSort = new ComboBox { Width = 160, Location = new Point(580, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            // 下方控制項統一移至 Y=24，精簡下拉選單寬度為 130px 達成緊湊介面
+            txtSearch = new TextBox { PlaceholderText = "搜尋代碼/名稱...", Width = 130, Location = new Point(155, 24), BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft JhengHei", 9) };
+            cmbCircle = new ComboBox { Width = 130, Location = new Point(295, 24), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            cmbTag = new ComboBox { Width = 130, Location = new Point(435, 24), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            cmbSort = new ComboBox { Width = 160, Location = new Point(575, 24), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
 
             cmbSort.Items.AddRange(new string[] { "依 遊戲名稱 排序", "依 發售日期 (新 ➔ 舊)", "依 發售日期 (舊 ➔ 新)", "依 最後遊玩 排序", "依 總遊玩時數 排序" });
             cmbSort.SelectedIndex = 0;
@@ -180,14 +175,12 @@ namespace GameLibraryApp
         {
             allGames = GameDataManager.LoadGames();
 
-            // 初始化廠商選單
             var circles = allGames.Select(g => g.Circle).Where(c => c != "未知廠商" && c != "Unknown").Distinct().OrderBy(c => c).ToList();
             cmbCircle.Items.Clear();
             cmbCircle.Items.Add("所有廠商");
             foreach (var c in circles) cmbCircle.Items.Add(c);
             cmbCircle.SelectedIndex = 0;
 
-            // === 【新增：動態載入標籤下拉選單】 ===
             var tags = allGames.SelectMany(g => g.Tags).Distinct().OrderBy(t => t).ToList();
             cmbTag.Items.Clear();
             cmbTag.Items.Add("所有標籤");
@@ -277,7 +270,6 @@ namespace GameLibraryApp
             if (cmbCircle.SelectedIndex > 0 && cmbCircle.SelectedItem != null)
                 query = query.Where(g => g.Circle == cmbCircle.SelectedItem.ToString());
 
-            // === 【新增：標籤核心篩選邏輯】 ===
             if (cmbTag.SelectedIndex > 0 && cmbTag.SelectedItem != null)
             {
                 string selectedTag = cmbTag.SelectedItem.ToString() ?? "";
@@ -342,8 +334,6 @@ namespace GameLibraryApp
                     lblPlatform.Text = $"代碼: {game.Code} | 平台: {game.Platform}";
 
                     string uiReleaseDate = (game.ReleaseDate == "1970-01-01") ? "未知" : game.ReleaseDate;
-
-                    // === 【資訊面板顯示更新】：拔除更新日期，並漂亮地將標籤展開 ===
                     string displayTags = game.Tags.Count > 0 ? string.Join(", ", game.Tags) : "無標籤";
 
                     lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n遊戲標籤：\n{displayTags}\n\n個人備忘：\n{game.Notes}";
