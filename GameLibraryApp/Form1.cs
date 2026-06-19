@@ -32,6 +32,9 @@ namespace GameLibraryApp
         private List<GameItem> allGames = new List<GameItem>();
         private GameItem? selectedGame = null;
 
+        // === 【新增核心控制旗標：徹底防止滾動條重繪時引發的無限布局迴圈】 ===
+        private bool isScaling = false;
+
         public Form1()
         {
             InitializeComponent();
@@ -44,17 +47,18 @@ namespace GameLibraryApp
             txtSearch.TextChanged += (s, e) => FilterAndRefreshGrid();
             cmbCircle.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
             cmbSort.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
+
+            gamesFlowPanel.SizeChanged += (s, e) => CenterFlowPanelCards();
         }
 
         private void SetupCustomUI()
         {
-            this.Text = "PixelVault 數位遊戲館藏儀表板 v6.2";
-            this.Size = new Size(1220, 760);
+            this.Text = "PixelVault 數位遊戲館藏儀表板 v8.0 (Resilient Edition)";
+            this.Size = new Size(1280, 760);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(18, 18, 18);
             this.ForeColor = Color.FromArgb(224, 224, 224);
 
-            // 1. 左側功能選單
             sidebarPanel = new Panel { Width = 220, Dock = DockStyle.Left, BackColor = Color.FromArgb(37, 37, 38) };
             categoryListBox = new ListBox
             {
@@ -92,7 +96,6 @@ namespace GameLibraryApp
             btnAddGame.FlatAppearance.BorderSize = 0;
             sidebarPanel.Controls.Add(btnAddGame);
 
-            // 2. 右側詳細資訊面板
             detailsPanel = new Panel { Width = 300, Dock = DockStyle.Right, BackColor = Color.FromArgb(30, 30, 30), Padding = new Padding(15) };
             lblGameTitle = new Label { Text = "未選擇遊戲", Font = new Font("Microsoft JhengHei", 15, FontStyle.Bold), ForeColor = Color.FromArgb(255, 64, 129), Dock = DockStyle.Top, Height = 60 };
             lblPlatform = new Label { Text = "代碼: -- | 平台: --", Font = new Font("Microsoft JhengHei", 10), ForeColor = Color.Gray, Dock = DockStyle.Top, Height = 25 };
@@ -115,22 +118,20 @@ namespace GameLibraryApp
             detailsPanel.Controls.Add(lblGameTitle);
             detailsPanel.Controls.Add(btnLaunch);
 
-            // 3. 頂部多功能導覽列 (【關鍵調整】: 縮小間距與座標，完美防切割)
             topHeaderPanel = new Panel { Height = 75, Dock = DockStyle.Top, BackColor = Color.FromArgb(25, 25, 26), Padding = new Padding(15, 10, 15, 10) };
             lblStats = new Label { Text = "載入中...", Font = new Font("Microsoft JhengHei", 9), ForeColor = Color.FromArgb(136, 136, 136), Location = new Point(10, 18), Size = new Size(140, 40) };
 
             txtSearch = new TextBox { PlaceholderText = "搜尋 代碼 / 遊戲名稱...", Width = 160, Location = new Point(160, 22), BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft JhengHei", 9) };
 
-            cmbCircle = new ComboBox { Width = 160, Location = new Point(330, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            cmbCircle = new ComboBox { Width = 170, Location = new Point(340, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
 
-            cmbSort = new ComboBox { Width = 180, Location = new Point(500, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
-            cmbSort.Items.AddRange(new string[] { "依 遊戲名稱 排序", "依 發售日期 排序", "依 最後遊玩 排序", "依 總遊玩時數 排序" });
+            cmbSort = new ComboBox { Width = 190, Location = new Point(530, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+            cmbSort.Items.AddRange(new string[] { "依 遊戲名稱 排序", "依 發售日期 (新 ➔ 舊)", "依 發售日期 (舊 ➔ 新)", "依 最後遊玩 排序", "依 總遊玩時數 排序" });
             cmbSort.SelectedIndex = 0;
 
             topHeaderPanel.Controls.AddRange(new Control[] { lblStats, txtSearch, cmbCircle, cmbSort });
 
-            // 4. 中央動態流動卡片區
-            gamesFlowPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 18, 18), AutoScroll = true, Padding = new Padding(15) };
+            gamesFlowPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 18, 18), AutoScroll = true, BorderStyle = BorderStyle.None };
 
             gameContextMenu = new ContextMenuStrip { BackColor = Color.FromArgb(30, 30, 30), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
             ToolStripMenuItem menuFav = new ToolStripMenuItem("⭐ 移入/移出收藏夾");
@@ -146,13 +147,75 @@ namespace GameLibraryApp
         {
             allGames = GameDataManager.LoadGames();
 
-            var circles = allGames.Select(g => g.Circle).Distinct().OrderBy(c => c).ToList();
+            var circles = allGames.Select(g => g.Circle)
+                                  .Where(c => c != "未知廠商" && c != "Unknown")
+                                  .Distinct()
+                                  .OrderBy(c => c)
+                                  .ToList();
             cmbCircle.Items.Clear();
             cmbCircle.Items.Add("所有社團/廠商");
             foreach (var c in circles) cmbCircle.Items.Add(c);
             cmbCircle.SelectedIndex = 0;
 
             FilterAndRefreshGrid();
+        }
+
+        private void CenterFlowPanelCards()
+        {
+            // === 【攔截鎖機制】: 如果是重繪引發的 Size 異動，直接退出，斷開事件遞迴 ===
+            if (isScaling) return;
+            isScaling = true;
+
+            try
+            {
+                int availableWidth = gamesFlowPanel.ClientSize.Width;
+                if (availableWidth <= 0 || gamesFlowPanel.Controls.Count == 0) return;
+
+                int columns = 3;
+                int totalMarginSpace = 60;
+                int scrollbarBuffer = 25;
+                int netAvailableWidth = availableWidth - totalMarginSpace - scrollbarBuffer;
+
+                int newCardWidth = netAvailableWidth / columns;
+                if (newCardWidth < 210) newCardWidth = 210;
+
+                int newCoverHeight = (int)(newCardWidth * 0.714);
+                int newCardHeight = newCoverHeight + 120;
+
+                foreach (Control control in gamesFlowPanel.Controls)
+                {
+                    if (control is Panel card)
+                    {
+                        card.Size = new Size(newCardWidth, newCardHeight);
+
+                        if (card.Controls["lblCode"] is Label lblCode) lblCode.Size = new Size(newCardWidth, 26);
+                        if (card.Controls["pbCover"] is PictureBox pbCover) pbCover.Size = new Size(newCardWidth, newCoverHeight);
+                        if (card.Controls["lblTitle"] is Label lblTitle)
+                        {
+                            lblTitle.Size = new Size(newCardWidth - 20, 40);
+                            lblTitle.Location = new Point(10, newCoverHeight + 10);
+                        }
+                        if (card.Controls["lblCirc"] is Label lblCirc)
+                        {
+                            lblCirc.Size = new Size(newCardWidth - 20, 20);
+                            lblCirc.Location = new Point(10, newCoverHeight + 55);
+                        }
+                        if (card.Controls["lblTime"] is Label lblTime)
+                        {
+                            lblTime.Size = new Size(newCardWidth - 20, 15);
+                            lblTime.Location = new Point(10, newCoverHeight + 75);
+                        }
+                    }
+                }
+
+                int remainingSpace = availableWidth - ((newCardWidth + 20) * columns);
+                int paddingLeft = Math.Max(10, remainingSpace / 2);
+                gamesFlowPanel.Padding = new Padding(paddingLeft, 15, 10, 15);
+            }
+            finally
+            {
+                isScaling = false; // 解鎖
+            }
         }
 
         private void FilterAndRefreshGrid()
@@ -177,17 +240,28 @@ namespace GameLibraryApp
             int sortIdx = cmbSort.SelectedIndex;
             if (sortIdx == 0) query = query.OrderBy(g => g.Title);
             else if (sortIdx == 1) query = query.OrderByDescending(g => g.ReleaseDate);
-            else if (sortIdx == 2) query = query.OrderByDescending(g => g.LastPlayed ?? DateTime.MinValue);
-            else if (sortIdx == 3) query = query.OrderByDescending(g => g.TotalPlayTime);
+            else if (sortIdx == 2) query = query.OrderBy(g => g.ReleaseDate);
+            else if (sortIdx == 3) query = query.OrderByDescending(g => g.LastPlayed ?? DateTime.MinValue);
+            else if (sortIdx == 4) query = query.OrderByDescending(g => g.TotalPlayTime);
 
             foreach (var game in query)
             {
                 Panel card = new Panel { Size = new Size(210, 270), Margin = new Padding(10), BackColor = Color.FromArgb(30, 30, 30), Cursor = Cursors.Hand };
-                Label lblCode = new Label { Text = game.Code, Size = new Size(110, 20), Location = new Point(5, 5), BackColor = Color.FromArgb(200, 0, 0, 0), ForeColor = Color.FromArgb(255, 64, 129), Font = new Font("Segoe UI", 8, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter };
 
-                PictureBox pbCover = new PictureBox { Size = new Size(210, 150), Location = new Point(0, 0), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(45, 45, 48) };
+                Label lblCode = new Label
+                {
+                    Name = "lblCode",
+                    Text = game.Code,
+                    Size = new Size(210, 26),
+                    Location = new Point(0, 0),
+                    BackColor = Color.FromArgb(190, 23, 26, 33),
+                    ForeColor = Color.FromArgb(255, 64, 129),
+                    Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
 
-                // 動態封面流處理
+                PictureBox pbCover = new PictureBox { Name = "pbCover", Size = new Size(210, 150), Location = new Point(0, 0), SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(45, 45, 48) };
+
                 if (!string.IsNullOrEmpty(game.CoverImagePath))
                 {
                     if (game.CoverImagePath.StartsWith("http"))
@@ -196,7 +270,6 @@ namespace GameLibraryApp
                     }
                     else if (File.Exists(game.CoverImagePath))
                     {
-                        // 【非鎖定技術】: 複製到記憶體中渲染，不鎖定本地檔案
                         using (var img = Image.FromFile(game.CoverImagePath))
                         {
                             pbCover.Image = new Bitmap(img);
@@ -204,16 +277,22 @@ namespace GameLibraryApp
                     }
                 }
 
-                Label lblTitle = new Label { Text = game.IsFavorite ? $"⭐ {game.Title}" : game.Title, Size = new Size(190, 40), Location = new Point(10, 160), Font = new Font("Microsoft JhengHei", 9, FontStyle.Bold), ForeColor = Color.White };
-                Label lblCirc = new Label { Text = game.Circle, Size = new Size(190, 20), Location = new Point(10, 205), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.Gray };
-                Label lblTime = new Label { Text = $"時數: {game.TotalPlayTime} 分鐘", Size = new Size(190, 15), Location = new Point(10, 225), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.FromArgb(3, 218, 198) };
+                Label lblTitle = new Label { Name = "lblTitle", Text = game.IsFavorite ? $"⭐ {game.Title}" : game.Title, Size = new Size(190, 40), Location = new Point(10, 160), Font = new Font("Microsoft JhengHei", 9, FontStyle.Bold), ForeColor = Color.White };
+                Label lblCirc = new Label { Name = "lblCirc", Text = game.Circle, Size = new Size(190, 20), Location = new Point(10, 205), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.Gray };
+                Label lblTime = new Label { Name = "lblTime", Text = $"時數: {game.TotalPlayTime} 分鐘", Size = new Size(190, 15), Location = new Point(10, 225), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.FromArgb(3, 218, 198) };
 
                 Action selectAction = () =>
                 {
                     selectedGame = game;
                     lblGameTitle.Text = game.Title;
                     lblPlatform.Text = $"代碼: {game.Code} | 平台: {game.Platform}";
-                    lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{game.ReleaseDate}\n最後更新：{game.LastUpdated}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n個人備忘：\n{game.Notes}";
+
+                    string uiReleaseDate = (game.ReleaseDate == "1970-01-01") ? "未知" : game.ReleaseDate;
+
+                    // 💡 【補齊面板欄位對齊展示】: 隔離並優化空字串顯示
+                    string uiLastUpdated = (string.IsNullOrEmpty(game.LastUpdated) || game.LastUpdated == "None") ? "無" : game.LastUpdated;
+
+                    lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後更新：{uiLastUpdated}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n個人備忘：\n{game.Notes}";
                     btnLaunch.Visible = true;
                 };
 
@@ -226,25 +305,22 @@ namespace GameLibraryApp
                 card.MouseDown += (s, e) => { if (e.Button == MouseButtons.Right) selectedGame = game; };
                 pbCover.MouseDown += (s, e) => { if (e.Button == MouseButtons.Right) selectedGame = game; };
 
-                card.Controls.AddRange(new Control[] { lblCode, lblCirc, lblTime, lblTitle, pbCover });
+                card.Controls.AddRange(new Control[] { pbCover, lblTitle, lblCirc, lblTime, lblCode });
+                lblCode.BringToFront();
+
                 gamesFlowPanel.Controls.Add(card);
             }
+
+            CenterFlowPanelCards();
         }
 
-        // 【網路抓取引擎升級】: 加裝高階偽裝標頭，徹底解決 403 無封面問題
         private async void DownloadImageAsync(GameItem game, PictureBox pb)
         {
             try
             {
                 using var client = new HttpClient();
-                // 1. 注入主流瀏覽器偽裝
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-
-                // 2. 針對 DLsite 特規防盜鏈進行 Referer 突破
-                if (game.Platform == "DLsite")
-                {
-                    client.DefaultRequestHeaders.Add("Referer", "https://www.dlsite.com/");
-                }
+                if (game.Platform == "DLsite") client.DefaultRequestHeaders.Add("Referer", "https://www.dlsite.com/");
 
                 byte[] bytes = await client.GetByteArrayAsync(game.CoverImagePath);
                 string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "covers");
@@ -252,24 +328,17 @@ namespace GameLibraryApp
 
                 string localPath = Path.Combine(dir, $"{game.Code}.jpg");
                 await File.WriteAllBytesAsync(localPath, bytes);
-
                 game.CoverImagePath = localPath;
 
                 if (pb.IsHandleCreated)
                 {
                     pb.Invoke(new Action(() =>
                     {
-                        using (var ms = new MemoryStream(bytes))
-                        {
-                            pb.Image = new Bitmap(ms);
-                        }
+                        using (var ms = new MemoryStream(bytes)) pb.Image = new Bitmap(ms);
                     }));
                 }
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"圖片下載失敗: {ex.Message}");
-            }
+            catch { /* 忽略 */ }
         }
 
         private void BtnLaunch_Click(object? sender, EventArgs e)
@@ -278,14 +347,12 @@ namespace GameLibraryApp
             try
             {
                 var startTime = DateTime.Now;
-
                 System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = selectedGame.ExePath,
                     UseShellExecute = true,
                     WorkingDirectory = Path.GetDirectoryName(selectedGame.ExePath)
                 };
-
                 var proc = System.Diagnostics.Process.Start(startInfo);
                 selectedGame.LastPlayed = DateTime.Now;
 
@@ -300,7 +367,6 @@ namespace GameLibraryApp
                         this.Invoke(new Action(() => FilterAndRefreshGrid()));
                     };
                 }
-
                 GameDataManager.SaveGames(allGames);
                 FilterAndRefreshGrid();
             }
