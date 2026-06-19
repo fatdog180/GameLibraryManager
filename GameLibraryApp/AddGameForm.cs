@@ -17,6 +17,7 @@ namespace GameLibraryApp
         private TextBox txtNotes = null!;
         private Button btnFetch = null!;
         private Button btnBrowse = null!;
+        private Button btnCancel = null!;
         private Button btnSave = null!;
 
         public AddGameForm() { SetupUI(); }
@@ -50,18 +51,25 @@ namespace GameLibraryApp
 
             Label lblPath = new Label { Text = "執行檔路徑：", Location = new Point(30, 225), AutoSize = true };
             txtExePath = new TextBox { Location = new Point(130, 222), Width = 220, BackColor = Color.FromArgb(23, 26, 33), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, ReadOnly = true };
+
+            // 瀏覽按鈕本體
             btnBrowse = new Button { Text = "瀏覽...", Location = new Point(360, 220), Width = 80, BackColor = Color.FromArgb(42, 113, 212), FlatStyle = FlatStyle.Flat };
             btnBrowse.FlatAppearance.BorderSize = 0;
             btnBrowse.Click += BtnBrowse_Click;
 
             Label lblNotes = new Label { Text = "遊戲備忘：", Location = new Point(30, 275), AutoSize = true };
-            txtNotes = new TextBox { Location = new Point(130, 272), Width = 310, Height = 70, Multiline = true, BackColor = Color.FromArgb(23, 26, 33), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+            txtNotes = new TextBox { Location = new Point(130, 272), Width = 310, Height = 70, Multiline = true, BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+
+            btnCancel = new Button { Text = "取消", Location = new Point(230, 365), Width = 110, Height = 35, BackColor = Color.FromArgb(141, 150, 157), FlatStyle = FlatStyle.Flat };
+            btnCancel.FlatAppearance.BorderSize = 0;
+            btnCancel.Click += (s, e) => { this.DialogResult = DialogResult.Cancel; this.Close(); };
 
             btnSave = new Button { Text = "確認匯入", Location = new Point(350, 365), Width = 110, Height = 35, BackColor = Color.FromArgb(92, 184, 92), FlatStyle = FlatStyle.Flat, Font = new Font("Microsoft JhengHei", 10, FontStyle.Bold) };
             btnSave.FlatAppearance.BorderSize = 0;
             btnSave.Click += BtnSave_Click;
 
-            this.Controls.AddRange(new Control[] { lblCode, txtCode, btnFetch, lblTitle, txtTitle, lblPlatform, cmbPlatform, lblCircle, txtCircle, lblPath, txtExePath, btnBrowse, lblNotes, txtNotes, btnSave });
+            // === 【修正】: 將 btnBrowse 重新加入陣列中 ===
+            this.Controls.AddRange(new Control[] { lblCode, txtCode, btnFetch, lblTitle, txtTitle, lblPlatform, cmbPlatform, lblCircle, txtCircle, lblPath, txtExePath, btnBrowse, lblNotes, txtNotes, btnCancel, btnSave });
         }
 
         private async void AsyncBtnFetch_Click(object? sender, EventArgs e)
@@ -74,7 +82,6 @@ namespace GameLibraryApp
 
             if (match.Success)
             {
-                // === 【修復處一】: 改為 C# 標準的 .Groups[1].Value 語法
                 targetCode = match.Groups[1].Value.ToUpper();
                 txtCode.Text = targetCode;
             }
@@ -104,6 +111,7 @@ namespace GameLibraryApp
                 txtTitle.Text = fetchedGame.Title;
                 txtCircle.Text = fetchedGame.Circle;
                 NewGame.ReleaseDate = fetchedGame.ReleaseDate;
+                NewGame.LastUpdated = fetchedGame.LastUpdated;
                 NewGame.CoverImagePath = fetchedGame.CoverImagePath;
                 MessageBox.Show("成功解析並對齊網路資料！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -131,7 +139,6 @@ namespace GameLibraryApp
             string rawInput = txtCode.Text.Trim();
             Match match = Regex.Match(rawInput, @"(RJ\d+|BJ\d+|VJ\d+|STEAM\d+|\d{5,})", RegexOptions.IgnoreCase);
 
-            // === 【修復處二】: 改為 C# 標準的 .Groups[1].Value 語法
             string finalCode = match.Success ? match.Groups[1].Value.ToUpper() : rawInput.ToUpper();
             string platform = cmbPlatform.SelectedItem?.ToString() ?? "Steam";
 

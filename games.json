@@ -112,13 +112,13 @@
     "TotalPlayTime": 0
   },
   {
-    "Id": "9aae2298-59b5-4762-a098-60fb07830235",
+    "Id": "43dc4543-d459-45e4-b766-a6b7aec6aa6a",
     "Code": "RJ01028095",
     "Title": "\u52C7\u8005\u306E\u8A66\u7DF4\u306B\u6311\u6226\u3057\u305F\u3089\u8A98\u60D1\u3055\u308C\u305F\u50D5",
     "Circle": "\u306F\u308B\u306A\u308B",
     "Platform": "DLsite",
     "ExePath": "D:\\Hgame_Library\\03_Archived\\[RJ01028095] \u306F\u308B\u306A\u308B \u52C7\u8005\u306E\u8A66\u7DF4\u306B\u6311\u6226\u3057\u305F\u3089\u8A98\u60D1\u3055\u308C\u305F\u50D5\\Game.exe",
-    "CoverImagePath": "https://img.dlsite.jp/modpub/images2/work/doujin/RJ01029000/RJ01028095_img_main.jpg",
+    "CoverImagePath": "C:\\Dev\\GameLibraryManager\\GameLibraryApp\\bin\\Debug\\net10.0-windows\\covers\\RJ01028095.jpg",
     "IsFavorite": false,
     "Notes": "",
     "Tags": [],

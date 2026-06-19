@@ -32,7 +32,6 @@ namespace GameLibraryApp
         private List<GameItem> allGames = new List<GameItem>();
         private GameItem? selectedGame = null;
 
-        // === 【新增核心控制旗標：徹底防止滾動條重繪時引發的無限布局迴圈】 ===
         private bool isScaling = false;
 
         public Form1()
@@ -53,7 +52,7 @@ namespace GameLibraryApp
 
         private void SetupCustomUI()
         {
-            this.Text = "PixelVault 數位遊戲館藏儀表板 v8.0 (Resilient Edition)";
+            this.Text = "PixelVault 數位遊戲館藏儀表板 v9.0 (Ultimate Stable Edition)";
             this.Size = new Size(1280, 760);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(18, 18, 18);
@@ -122,13 +121,11 @@ namespace GameLibraryApp
             lblStats = new Label { Text = "載入中...", Font = new Font("Microsoft JhengHei", 9), ForeColor = Color.FromArgb(136, 136, 136), Location = new Point(10, 18), Size = new Size(140, 40) };
 
             txtSearch = new TextBox { PlaceholderText = "搜尋 代碼 / 遊戲名稱...", Width = 160, Location = new Point(160, 22), BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Microsoft JhengHei", 9) };
-
             cmbCircle = new ComboBox { Width = 170, Location = new Point(340, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
-
             cmbSort = new ComboBox { Width = 190, Location = new Point(530, 22), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(51, 51, 51), ForeColor = Color.White, Font = new Font("Microsoft JhengHei", 9) };
+
             cmbSort.Items.AddRange(new string[] { "依 遊戲名稱 排序", "依 發售日期 (新 ➔ 舊)", "依 發售日期 (舊 ➔ 新)", "依 最後遊玩 排序", "依 總遊玩時數 排序" });
             cmbSort.SelectedIndex = 0;
-
             topHeaderPanel.Controls.AddRange(new Control[] { lblStats, txtSearch, cmbCircle, cmbSort });
 
             gamesFlowPanel = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 18, 18), AutoScroll = true, BorderStyle = BorderStyle.None };
@@ -141,12 +138,12 @@ namespace GameLibraryApp
             gameContextMenu.Items.AddRange(new ToolStripItem[] { menuFav, menuDel });
 
             this.Controls.AddRange(new Control[] { gamesFlowPanel, topHeaderPanel, detailsPanel, sidebarPanel });
+            gamesFlowPanel.BringToFront();
         }
 
         private void LoadGameData()
         {
             allGames = GameDataManager.LoadGames();
-
             var circles = allGames.Select(g => g.Circle)
                                   .Where(c => c != "未知廠商" && c != "Unknown")
                                   .Distinct()
@@ -162,21 +159,26 @@ namespace GameLibraryApp
 
         private void CenterFlowPanelCards()
         {
-            // === 【攔截鎖機制】: 如果是重繪引發的 Size 異動，直接退出，斷開事件遞迴 ===
             if (isScaling) return;
             isScaling = true;
 
             try
             {
-                int availableWidth = gamesFlowPanel.ClientSize.Width;
-                if (availableWidth <= 0 || gamesFlowPanel.Controls.Count == 0) return;
+                gamesFlowPanel.AutoScroll = false;
+                gamesFlowPanel.SuspendLayout();
+
+                // === 【終極修復 1】：永遠用總 Width，且強制扣除滾動條與安全距離 ===
+                int absoluteWidth = gamesFlowPanel.Width;
+                if (absoluteWidth <= 0 || gamesFlowPanel.Controls.Count == 0) return;
 
                 int columns = 3;
-                int totalMarginSpace = 60;
-                int scrollbarBuffer = 25;
-                int netAvailableWidth = availableWidth - totalMarginSpace - scrollbarBuffer;
+                int marginPerCard = 20;
+                int totalMarginWidth = columns * marginPerCard;
 
-                int newCardWidth = netAvailableWidth / columns;
+                // 預留系統標準滾動條寬度與 10px 安全緩衝，確保算出來的寬度絕對不會溢位
+                int safeWidth = absoluteWidth - SystemInformation.VerticalScrollBarWidth - 10;
+
+                int newCardWidth = (safeWidth - totalMarginWidth) / columns;
                 if (newCardWidth < 210) newCardWidth = 210;
 
                 int newCoverHeight = (int)(newCardWidth * 0.714);
@@ -187,7 +189,6 @@ namespace GameLibraryApp
                     if (control is Panel card)
                     {
                         card.Size = new Size(newCardWidth, newCardHeight);
-
                         if (card.Controls["lblCode"] is Label lblCode) lblCode.Size = new Size(newCardWidth, 26);
                         if (card.Controls["pbCover"] is PictureBox pbCover) pbCover.Size = new Size(newCardWidth, newCoverHeight);
                         if (card.Controls["lblTitle"] is Label lblTitle)
@@ -208,13 +209,17 @@ namespace GameLibraryApp
                     }
                 }
 
-                int remainingSpace = availableWidth - ((newCardWidth + 20) * columns);
-                int paddingLeft = Math.Max(10, remainingSpace / 2);
-                gamesFlowPanel.Padding = new Padding(paddingLeft, 15, 10, 15);
+                int actualUsedWidth = columns * (newCardWidth + marginPerCard);
+                int paddingLeft = Math.Max(0, (safeWidth - actualUsedWidth) / 2);
+
+                // 右側 padding 給 0，因為安全距離已經幫忙擋住了
+                gamesFlowPanel.Padding = new Padding(paddingLeft, 15, 0, 15);
             }
             finally
             {
-                isScaling = false; // 解鎖
+                gamesFlowPanel.ResumeLayout(true);
+                gamesFlowPanel.AutoScroll = true;
+                isScaling = false;
             }
         }
 
@@ -264,16 +269,10 @@ namespace GameLibraryApp
 
                 if (!string.IsNullOrEmpty(game.CoverImagePath))
                 {
-                    if (game.CoverImagePath.StartsWith("http"))
-                    {
-                        DownloadImageAsync(game, pbCover);
-                    }
+                    if (game.CoverImagePath.StartsWith("http")) { DownloadImageAsync(game, pbCover); }
                     else if (File.Exists(game.CoverImagePath))
                     {
-                        using (var img = Image.FromFile(game.CoverImagePath))
-                        {
-                            pbCover.Image = new Bitmap(img);
-                        }
+                        using (var img = Image.FromFile(game.CoverImagePath)) { pbCover.Image = new Bitmap(img); }
                     }
                 }
 
@@ -288,8 +287,6 @@ namespace GameLibraryApp
                     lblPlatform.Text = $"代碼: {game.Code} | 平台: {game.Platform}";
 
                     string uiReleaseDate = (game.ReleaseDate == "1970-01-01") ? "未知" : game.ReleaseDate;
-
-                    // 💡 【補齊面板欄位對齊展示】: 隔離並優化空字串顯示
                     string uiLastUpdated = (string.IsNullOrEmpty(game.LastUpdated) || game.LastUpdated == "None") ? "無" : game.LastUpdated;
 
                     lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後更新：{uiLastUpdated}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n個人備忘：\n{game.Notes}";
@@ -338,7 +335,7 @@ namespace GameLibraryApp
                     }));
                 }
             }
-            catch { /* 忽略 */ }
+            catch { }
         }
 
         private void BtnLaunch_Click(object? sender, EventArgs e)
@@ -379,7 +376,16 @@ namespace GameLibraryApp
             {
                 if (addForm.ShowDialog(this) == DialogResult.OK)
                 {
-                    allGames.Add(addForm.NewGame);
+                    GameItem newGame = addForm.NewGame;
+
+                    // === 【終極修復 2】：在寫入前嚴格防堵重複加入的相同代碼 ===
+                    if (allGames.Any(g => g.Code == newGame.Code))
+                    {
+                        MessageBox.Show($"遊戲庫中已經存在代碼為「{newGame.Code}」的遊戲囉！\n系統已自動攔截重複匯入。", "重複匯入攔截", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    allGames.Add(newGame);
                     GameDataManager.SaveGames(allGames);
                     LoadGameData();
                 }
