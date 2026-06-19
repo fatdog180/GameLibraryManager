@@ -1,0 +1,23 @@
+## Code Navigation and code intelligence
+.vs/
+
+## Source Control
+.git/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+bin/
+obj/
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.usermd
+*.userprefs
+
+## VS Code settings
+.vscode/
