@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace GameLibraryApp
@@ -13,6 +14,7 @@ namespace GameLibraryApp
         private Button btnAddGame = null!;
 
         private ListView gamesListView = null!;
+        private ContextMenuStrip gameContextMenu = null!; // 右鍵選單
 
         private Panel detailsPanel = null!;
         private Label lblGameTitle = null!;
@@ -22,18 +24,21 @@ namespace GameLibraryApp
 
         // === 資料變數 ===
         private List<GameItem> allGames = new List<GameItem>();
-        private GameItem? selectedGame = null; // 追蹤當前選取的遊戲
+        private GameItem? selectedGame = null;
 
         public Form1()
         {
             InitializeComponent();
-            SetupCustomUI();  // 呼叫自訂的高質感介面佈局
-            LoadGameData();   // 載入 JSON 檔案資料
+            SetupCustomUI();
+            LoadGameData();
 
             // === 綁定事件 ===
             btnAddGame.Click += BtnAddGame_Click;
             gamesListView.SelectedIndexChanged += GamesListView_SelectedIndexChanged;
             btnLaunch.Click += BtnLaunch_Click;
+
+            // 側邊欄切換事件
+            categoryListBox.SelectedIndexChanged += CategoryListBox_SelectedIndexChanged;
         }
 
         /// <summary>
@@ -132,9 +137,77 @@ namespace GameLibraryApp
             gamesListView.Columns.Add("遊戲名稱", 350);
             gamesListView.Columns.Add("平台", 120);
 
+            // 5. 建立高質感右鍵功能選單
+            gameContextMenu = new ContextMenuStrip
+            {
+                BackColor = Color.FromArgb(23, 26, 33),
+                ForeColor = Color.White,
+                Font = new Font("Microsoft JhengHei", 10, FontStyle.Regular)
+            };
+
+            ToolStripMenuItem menuFavorite = new ToolStripMenuItem("⭐ 切換收藏狀態");
+            menuFavorite.Click += MenuFavorite_Click;
+
+            ToolStripMenuItem menuDelete = new ToolStripMenuItem("❌ 從遊戲庫移除");
+            menuDelete.Click += MenuDelete_Click;
+
+            gameContextMenu.Items.AddRange(new ToolStripItem[] { menuFavorite, menuDelete });
+            gamesListView.ContextMenuStrip = gameContextMenu; // 綁定至列表
+
+            // 將三大區塊依序加入表單中
             this.Controls.Add(gamesListView);
             this.Controls.Add(detailsPanel);
             this.Controls.Add(sidebarPanel);
+        }
+
+        /// <summary>
+        /// 側邊欄切換時，重新刷洗篩選清單
+        /// </summary>
+        private void CategoryListBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            RefreshGameList();
+        }
+
+        /// <summary>
+        /// 右鍵選單：切換收藏狀態
+        /// </summary>
+        private void MenuFavorite_Click(object? sender, EventArgs e)
+        {
+            if (gamesListView.SelectedItems.Count > 0 && selectedGame != null)
+            {
+                selectedGame.IsFavorite = !selectedGame.IsFavorite; // 狀態反轉
+                GameDataManager.SaveGames(allGames);                // 儲存變更
+
+                // 即時更新右側介面顯示
+                GamesListView_SelectedIndexChanged(null, EventArgs.Empty);
+
+                string status = selectedGame.IsFavorite ? "已加入收藏！" : "已取消收藏。";
+                MessageBox.Show($"《{selectedGame.Title}》{status}", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                RefreshGameList(); // 如果在「收藏分類」下，需要被刷掉
+            }
+        }
+
+        /// <summary>
+        /// 右鍵選單：刪除遊戲
+        /// </summary>
+        private void MenuDelete_Click(object? sender, EventArgs e)
+        {
+            if (gamesListView.SelectedItems.Count > 0 && selectedGame != null)
+            {
+                var result = MessageBox.Show($"確定要把《{selectedGame.Title}》從遊戲庫中移除嗎？", "確認移除", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (result == DialogResult.Yes)
+                {
+                    allGames.Remove(selectedGame);       // 從記憶體中移除
+                    GameDataManager.SaveGames(allGames); // 儲存變更
+
+                    // 重設選取狀態與右側面板
+                    gamesListView.SelectedIndices.Clear();
+
+                    RefreshGameList();
+                    MessageBox.Show("遊戲已成功移除。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
         }
 
         /// <summary>
@@ -142,29 +215,26 @@ namespace GameLibraryApp
         /// </summary>
         private void GamesListView_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            // 檢查是否有選取項目
             if (gamesListView.SelectedItems.Count > 0)
             {
-                // 從被點選項目的 Tag 中把當初綁定的 GameItem 物件挖出來
                 selectedGame = gamesListView.SelectedItems[0].Tag as GameItem;
 
                 if (selectedGame != null)
                 {
-                    lblGameTitle.Text = selectedGame.Title;
+                    // 如果有收藏，在標題加上星星
+                    lblGameTitle.Text = selectedGame.IsFavorite ? $"⭐ {selectedGame.Title}" : selectedGame.Title;
                     lblPlatform.Text = $"平台: {selectedGame.Platform}";
 
-                    // 格式化最後遊玩時間
                     string lastPlayedStr = selectedGame.LastPlayed.HasValue
                         ? selectedGame.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm")
                         : "從未遊玩";
 
                     lblNotes.Text = $"最後遊玩：{lastPlayedStr}\n\n備忘錄：\n{selectedGame.Notes}";
-                    btnLaunch.Visible = true; // 秀出啟動按鈕
+                    btnLaunch.Visible = true;
                 }
             }
             else
             {
-                // 沒選取任何東西時，重設介面
                 selectedGame = null;
                 lblGameTitle.Text = "請選擇遊戲";
                 lblPlatform.Text = "平台: --";
@@ -180,7 +250,6 @@ namespace GameLibraryApp
         {
             if (selectedGame == null) return;
 
-            // 防呆：如果根本沒選路徑
             if (string.IsNullOrWhiteSpace(selectedGame.ExePath))
             {
                 MessageBox.Show("此遊戲未設定正確的執行檔路徑！", "無法啟動", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -189,24 +258,20 @@ namespace GameLibraryApp
 
             try
             {
-                // 💡 關鍵細節：現代 .NET Core 之後，Process.Start 預設關閉了 Shell 執行
-                // 我們必須手動將 UseShellExecute 設為 true，否則執行檔路徑包含空白時會引發當機
                 System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = selectedGame.ExePath,
                     UseShellExecute = true,
-                    WorkingDirectory = System.IO.Path.GetDirectoryName(selectedGame.ExePath) // 設定工作目錄，防止遊戲找不到自家的資料檔
+                    WorkingDirectory = System.IO.Path.GetDirectoryName(selectedGame.ExePath)
                 };
 
                 System.Diagnostics.Process.Start(startInfo);
 
-                // 更新遊玩時間
                 selectedGame.LastPlayed = DateTime.Now;
                 GameDataManager.SaveGames(allGames);
 
                 // 即時重新整理右側文字面板
-                string lastPlayedStr = selectedGame.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm");
-                lblNotes.Text = $"最後遊玩：{lastPlayedStr}\n\n備忘錄：\n{selectedGame.Notes}";
+                GamesListView_SelectedIndexChanged(null, EventArgs.Empty);
             }
             catch (Exception ex)
             {
@@ -235,10 +300,37 @@ namespace GameLibraryApp
             RefreshGameList();
         }
 
+        /// <summary>
+        /// 依據側邊欄所選項目，進行過濾與刷新列表
+        /// </summary>
         private void RefreshGameList()
         {
             gamesListView.Items.Clear();
-            foreach (var game in allGames)
+
+            // 取得當前側邊欄選中的索引
+            int currentFilter = categoryListBox.SelectedIndex;
+
+            // 使用 LINQ 進行優雅的資料過濾
+            IEnumerable<GameItem> filteredGames = allGames;
+
+            switch (currentFilter)
+            {
+                case 1: // 我的收藏
+                    filteredGames = allGames.Where(g => g.IsFavorite);
+                    break;
+                case 2: // Steam
+                    filteredGames = allGames.Where(g => g.Platform == "Steam");
+                    break;
+                case 3: // DLsite
+                    filteredGames = allGames.Where(g => g.Platform == "DLsite");
+                    break;
+                case 0: // 所有遊戲
+                default:
+                    filteredGames = allGames;
+                    break;
+            }
+
+            foreach (var game in filteredGames)
             {
                 ListViewItem item = new ListViewItem(game.Title);
                 item.SubItems.Add(game.Platform);
