@@ -7,8 +7,8 @@ namespace GameLibraryApp
 {
     public static class GameDataManager
     {
-        // 定義 JSON 檔案要存放在哪裡（這裡設定在程式執行檔的同一個資料夾下，名為 games.json）
-        private static readonly string FilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "games.json");
+        // 定義 JSON 檔案要存放在哪裡，把 games.json 直接存放在專案主資料夾下
+        private static readonly string FilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "games.json");
 
         // 為了讓 JSON 看起來漂亮（有縮排），設定寫入選項
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions

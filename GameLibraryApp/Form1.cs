@@ -6,29 +6,31 @@ using System.Windows.Forms;
 namespace GameLibraryApp;
 
 public partial class Form1 : Form
-{
+{// === UI 控制項宣告 (加上 null! 完美解決 CS8618 警告) ===
+    private Panel sidebarPanel = null!;
+    private ListBox categoryListBox = null!;
+    private Button btnAddGame = null!;
+
+    private ListView gamesListView = null!;
+
+    private Panel detailsPanel = null!;
+    private Label lblGameTitle = null!;
+    private Label lblPlatform = null!;
+    private Label lblNotes = null!;
+    private Button btnLaunch = null!;
+
+    // === 資料變數 ===
+    private List<GameItem> allGames = new List<GameItem>();
+
     public Form1()
     {
         InitializeComponent();
         SetupCustomUI();  // 呼叫自訂的高質感介面佈局
         LoadGameData();   // 載入 JSON 檔案資料
+
+        // 綁定「新增遊戲」按鈕點擊事件
+        btnAddGame.Click += BtnAddGame_Click;
     }
-
-    // === UI 控制項宣告 ===
-    private Panel sidebarPanel;
-    private ListBox categoryListBox;
-    private Button btnAddGame;
-
-    private ListView gamesListView;
-
-    private Panel detailsPanel;
-    private Label lblGameTitle;
-    private Label lblPlatform;
-    private Label lblNotes;
-    private Button btnLaunch;
-
-    // === 資料變數 ===
-    private List<GameItem> allGames = new List<GameItem>();
 
     /// <summary>
     /// 純程式碼建構 Steam 風格的 UI 介面
@@ -63,7 +65,7 @@ public partial class Form1 : Form
         categoryListBox.Items.AddRange(new object[] { " 🎮 所有遊戲", " ⭐ 我的收藏", " 🌐 Steam", " 🔞 DLsite" });
         categoryListBox.SelectedIndex = 0;
 
-        // 美化 ListBox 的渲染效果
+        // 美化 ListBox 的渲染效果 (加上 ?? this.Font 解決 CS8604 警告)
         categoryListBox.DrawItem += (s, e) =>
         {
             if (e.Index < 0) return;
@@ -74,7 +76,7 @@ public partial class Form1 : Form
             {
                 e.Graphics.FillRectangle(new SolidBrush(Color.FromArgb(42, 113, 212)), e.Bounds); // 藍色高亮
             }
-            e.Graphics.DrawString(categoryListBox.Items[e.Index].ToString(), e.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 10);
+            e.Graphics.DrawString(categoryListBox.Items[e.Index].ToString(), e.Font ?? this.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 10);
         };
         sidebarPanel.Controls.Add(categoryListBox);
 
@@ -167,6 +169,34 @@ public partial class Form1 : Form
         this.Controls.Add(gamesListView);
         this.Controls.Add(detailsPanel);
         this.Controls.Add(sidebarPanel);
+    }
+
+    /// <summary>
+    /// 點擊「新增遊戲」的核心邏輯
+    /// </summary>
+    private void BtnAddGame_Click(object? sender, EventArgs e)
+    {
+        // 開啟剛剛設計的彈出視窗
+        using (AddGameForm addForm = new AddGameForm())
+        {
+            // 當使用者在小視窗按下「儲存」
+            if (addForm.ShowDialog(this) == DialogResult.OK)
+            {
+                // 1. 取得新遊戲物件
+                GameItem newGame = addForm.NewGame;
+
+                // 2. 加入到當前的記憶體清單中
+                allGames.Add(newGame);
+
+                // 3. 呼叫之前寫好的 DataManager，將清單即時寫入 JSON 存檔
+                GameDataManager.SaveGames(allGames);
+
+                // 4. 重新整理主畫面的 ListView 列表
+                RefreshGameList();
+
+                MessageBox.Show($"成功將《{newGame.Title}》新增至您的庫中！", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
     }
 
     /// <summary>
