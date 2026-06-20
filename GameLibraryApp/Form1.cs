@@ -86,7 +86,13 @@ namespace GameLibraryApp
             InitializeComponent();
             SetupCustomUI();
             InitializeLoadingPanel();
-            LoadGameData();
+
+            this.Shown += async (s, e) => 
+            {
+                this.Refresh(); // 強制視窗立刻重繪（畫出 Loading 面板）
+                await Task.Delay(100); // 讓 UI 執行緒稍微喘息，確保佈局完成
+                await LoadGameDataAsync();
+            };
 
             btnAddGame.Click += BtnAddGame_Click;
             btnBatchImport.Click += BtnBatchImport_Click;
@@ -229,7 +235,7 @@ namespace GameLibraryApp
             };
 
             ToolStripMenuItem menuFav = new ToolStripMenuItem("⭐ 移入/移出收藏夾");
-            menuFav.Click += (s, e) => { if (selectedGame != null) { selectedGame.IsFavorite = !selectedGame.IsFavorite; GameDataManager.SaveGames(allGames); FilterAndRefreshGrid(); } };
+            menuFav.Click += async (s, e) => { if (selectedGame != null) { selectedGame.IsFavorite = !selectedGame.IsFavorite; await SaveGamesHelperAsync(); FilterAndRefreshGrid(); } };
 
             // === 【新增】更改遊玩狀態子選單 ===
             ToolStripMenuItem menuStatus = new ToolStripMenuItem("📋 更改遊玩狀態");
@@ -249,7 +255,7 @@ namespace GameLibraryApp
             });
 
             ToolStripMenuItem menuDel = new ToolStripMenuItem("❌ 從資料庫永久移除");
-            menuDel.Click += (s, e) => { if (selectedGame != null && MessageBox.Show("確定要將此遊戲移除館藏嗎？", "刪除確認", MessageBoxButtons.YesNo) == DialogResult.Yes) { allGames.Remove(selectedGame); GameDataManager.SaveGames(allGames); LoadGameData(); } };
+            menuDel.Click += async (s, e) => { if (selectedGame != null && MessageBox.Show("確定要將此遊戲移除館藏嗎？", "刪除確認", MessageBoxButtons.YesNo) == DialogResult.Yes) { allGames.Remove(selectedGame); await SaveGamesHelperAsync(); await LoadGameDataAsync(); } };
 
             gameContextMenu.Items.AddRange(new ToolStripItem[] { menuOpenFolder, new ToolStripSeparator(), menuFav, menuStatus, new ToolStripSeparator(), menuDel });
 
@@ -298,9 +304,23 @@ namespace GameLibraryApp
             }
         }
 
-        private void LoadGameData()
+        private async Task SaveGamesHelperAsync()
         {
-            allGames = GameDataManager.LoadGames();
+            var result = await GameDataManager.SaveGamesAsync(allGames);
+            if (!result.success)
+            {
+                MessageBox.Show(result.errorMessage, "存檔失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async Task LoadGameDataAsync()
+        {
+            var result = await GameDataManager.LoadGamesAsync();
+            if (!result.success && !string.IsNullOrEmpty(result.errorMessage))
+            {
+                MessageBox.Show(result.errorMessage, "讀取錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            allGames = result.games;
 
             var circles = allGames.Select(g => g.Circle).Where(c => c != "未知廠商" && c != "Unknown").Distinct().OrderBy(c => c).ToList();
             cmbCircle.Items.Clear();
@@ -386,16 +406,36 @@ namespace GameLibraryApp
             }
         }
 
+        private int filterRequestId = 0;
         private async void FilterAndRefreshGrid()
         {
+            int currentRequestId = ++filterRequestId;
             if (pnlLoading != null)
             {
+                pnlLoading.BackColor = Color.FromArgb(200, 18, 18, 18); // 切換時使用半透明遮罩
                 pnlLoading.Visible = true;
                 pnlLoading.BringToFront();
                 await Task.Delay(20);
             }
 
+            if (currentRequestId != filterRequestId) return;
+
             gamesFlowPanel.SuspendLayout();
+            
+            foreach (Control ctrl in gamesFlowPanel.Controls)
+            {
+                if (ctrl is Panel p)
+                {
+                    if (p.Controls["pbCover"] is PictureBox pb && pb.Image != null)
+                    {
+                        var img = pb.Image;
+                        pb.Image = null;
+                        img.Dispose();
+                    }
+                    foreach (Control child in p.Controls) child.Dispose();
+                }
+                ctrl.Dispose();
+            }
             gamesFlowPanel.Controls.Clear();
 
             IEnumerable<GameItem> query = allGames;
@@ -456,7 +496,15 @@ namespace GameLibraryApp
                     if (game.CoverImagePath.StartsWith("http")) { DownloadImageAsync(game, pbCover); }
                     else if (File.Exists(game.CoverImagePath))
                     {
-                        using (var img = Image.FromFile(game.CoverImagePath)) { pbCover.Image = new Bitmap(img); }
+                        try
+                        {
+                            using (var stream = new FileStream(game.CoverImagePath, FileMode.Open, FileAccess.Read))
+                            using (var tempImg = Image.FromStream(stream))
+                            {
+                                pbCover.Image = new Bitmap(tempImg);
+                            }
+                        }
+                        catch { }
                     }
                 }
 
@@ -523,17 +571,17 @@ namespace GameLibraryApp
             CenterFlowPanelCards();
             gamesFlowPanel.ResumeLayout(true);
 
-            if (pnlLoading != null) pnlLoading.Visible = false;
+            if (currentRequestId == filterRequestId && pnlLoading != null) pnlLoading.Visible = false;
         }
 
         /// <summary>
         /// 透過右鍵選單更改選取遊戲的遊玩狀態，並儲存、刷新介面
         /// </summary>
-        private void SetSelectedGameStatus(PlayStatus newStatus)
+        private async void SetSelectedGameStatus(PlayStatus newStatus)
         {
             if (selectedGame == null) return;
             selectedGame.Status = newStatus;
-            GameDataManager.SaveGames(allGames);
+            await SaveGamesHelperAsync();
             FilterAndRefreshGrid();
 
             // 若右側詳情面板正在顯示此遊戲，即時更新狀態文字
@@ -573,7 +621,7 @@ namespace GameLibraryApp
             catch { }
         }
 
-        private void BtnLaunch_Click(object? sender, EventArgs e)
+        private async void BtnLaunch_Click(object? sender, EventArgs e)
         {
             if (selectedGame == null || string.IsNullOrWhiteSpace(selectedGame.ExePath)) return;
             try
@@ -593,19 +641,23 @@ namespace GameLibraryApp
                     proc.EnableRaisingEvents = true;
                     proc.Exited += (s, ev) =>
                     {
-                        int minutes = (int)(DateTime.Now - startTime).TotalMinutes;
-                        selectedGame.TotalPlayTime += Math.Max(1, minutes);
-                        GameDataManager.SaveGames(allGames);
-                        this.Invoke(new Action(() => FilterAndRefreshGrid()));
+                        this.BeginInvoke(new Action(async () =>
+                        {
+                            int minutes = (int)(DateTime.Now - startTime).TotalMinutes;
+                            selectedGame.TotalPlayTime += Math.Max(1, minutes);
+                            await SaveGamesHelperAsync();
+                            MessageBox.Show($"更新「{selectedGame.Title}」時數為 {selectedGame.TotalPlayTime} 分鐘。", "時數更新", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            FilterAndRefreshGrid();
+                        }));
                     };
                 }
-                GameDataManager.SaveGames(allGames);
+                await SaveGamesHelperAsync();
                 FilterAndRefreshGrid();
             }
             catch (Exception ex) { MessageBox.Show($"遊戲啟動失敗: {ex.Message}"); }
         }
 
-        private void BtnAddGame_Click(object? sender, EventArgs e)
+        private async void BtnAddGame_Click(object? sender, EventArgs e)
         {
             using (AddGameForm addForm = new AddGameForm())
             {
@@ -620,13 +672,13 @@ namespace GameLibraryApp
                     }
 
                     allGames.Add(newGame);
-                    GameDataManager.SaveGames(allGames);
-                    LoadGameData();
+                    await SaveGamesHelperAsync();
+                    await LoadGameDataAsync();
                 }
             }
         }
 
-        private void BtnBatchImport_Click(object? sender, EventArgs e)
+        private async void BtnBatchImport_Click(object? sender, EventArgs e)
         {
             using var batchForm = new BatchImportForm(allGames);
             if (batchForm.ShowDialog(this) == DialogResult.OK && batchForm.ImportedGames.Count > 0)
@@ -642,8 +694,8 @@ namespace GameLibraryApp
                 }
                 if (added > 0)
                 {
-                    GameDataManager.SaveGames(allGames);
-                    LoadGameData();
+                    await SaveGamesHelperAsync();
+                    await LoadGameDataAsync();
                     MessageBox.Show($"🎮 成功批量匯入 {added} 款遊戲！", "匯入完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
@@ -654,8 +706,8 @@ namespace GameLibraryApp
             pnlLoading = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(200, 18, 18, 18),
-                Visible = false
+                BackColor = Color.FromArgb(255, 18, 18, 18), // 初始載入時使用全不透明背景，遮住尚未成型的 UI
+                Visible = true
             };
             var lblLoading = new Label
             {
