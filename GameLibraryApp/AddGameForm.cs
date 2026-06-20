@@ -15,6 +15,7 @@ namespace GameLibraryApp
         private TextBox txtCircle = null!;
         private TextBox txtExePath = null!;
         private TextBox txtNotes = null!;
+        private ComboBox cmbStatus = null!;
         private Button btnFetch = null!;
         private Button btnBrowse = null!;
         private Button btnCancel = null!;
@@ -25,7 +26,7 @@ namespace GameLibraryApp
         private void SetupUI()
         {
             this.Text = "新增遊戲至庫中";
-            this.Size = new Size(520, 460);
+            this.Size = new Size(520, 510);  // 高度從 460 調整為 510，容納狀態列
             this.StartPosition = FormStartPosition.CenterParent;
             this.BackColor = Color.FromArgb(27, 40, 56);
             this.ForeColor = Color.White;
@@ -55,18 +56,31 @@ namespace GameLibraryApp
             btnBrowse.FlatAppearance.BorderSize = 0;
             btnBrowse.Click += BtnBrowse_Click;
 
-            Label lblNotes = new Label { Text = "遊戲備忘：", Location = new Point(30, 275), AutoSize = true };
-            txtNotes = new TextBox { Location = new Point(130, 272), Width = 310, Height = 70, Multiline = true, BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+            // === 【新增】遊玩狀態選單 ===
+            Label lblStatus = new Label { Text = "遊玩狀態：", Location = new Point(30, 275), AutoSize = true };
+            cmbStatus = new ComboBox
+            {
+                Location = new Point(130, 272),
+                Width = 310,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(23, 26, 33),
+                ForeColor = Color.White
+            };
+            cmbStatus.Items.AddRange(new string[] { "📦 尚未遊玩", "🎮 正在玩", "🏆 已通關", "💖 願望清單" });
+            cmbStatus.SelectedIndex = 0; // 預設：尚未遊玩
 
-            btnCancel = new Button { Text = "取消", Location = new Point(230, 365), Width = 110, Height = 35, BackColor = Color.FromArgb(141, 150, 157), FlatStyle = FlatStyle.Flat };
+            Label lblNotes = new Label { Text = "遊戲備忘：", Location = new Point(30, 325), AutoSize = true };
+            txtNotes = new TextBox { Location = new Point(130, 322), Width = 310, Height = 70, Multiline = true, BackColor = Color.FromArgb(27, 40, 56), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+
+            btnCancel = new Button { Text = "取消", Location = new Point(230, 415), Width = 110, Height = 35, BackColor = Color.FromArgb(141, 150, 157), FlatStyle = FlatStyle.Flat };
             btnCancel.FlatAppearance.BorderSize = 0;
             btnCancel.Click += (s, e) => { this.DialogResult = DialogResult.Cancel; this.Close(); };
 
-            btnSave = new Button { Text = "確認匯入", Location = new Point(350, 365), Width = 110, Height = 35, BackColor = Color.FromArgb(92, 184, 92), FlatStyle = FlatStyle.Flat, Font = new Font("Microsoft JhengHei", 10, FontStyle.Bold) };
+            btnSave = new Button { Text = "確認匯入", Location = new Point(350, 415), Width = 110, Height = 35, BackColor = Color.FromArgb(92, 184, 92), FlatStyle = FlatStyle.Flat, Font = new Font("Microsoft JhengHei", 10, FontStyle.Bold) };
             btnSave.FlatAppearance.BorderSize = 0;
             btnSave.Click += BtnSave_Click;
 
-            this.Controls.AddRange(new Control[] { lblCode, txtCode, btnFetch, lblTitle, txtTitle, lblPlatform, cmbPlatform, lblCircle, txtCircle, lblPath, txtExePath, btnBrowse, lblNotes, txtNotes, btnCancel, btnSave });
+            this.Controls.AddRange(new Control[] { lblCode, txtCode, btnFetch, lblTitle, txtTitle, lblPlatform, cmbPlatform, lblCircle, txtCircle, lblPath, txtExePath, btnBrowse, lblStatus, cmbStatus, lblNotes, txtNotes, btnCancel, btnSave });
         }
 
         private async void AsyncBtnFetch_Click(object? sender, EventArgs e)
@@ -171,6 +185,15 @@ namespace GameLibraryApp
             NewGame.Circle = string.IsNullOrWhiteSpace(txtCircle.Text) ? "未知廠商" : txtCircle.Text.Trim();
             NewGame.ExePath = txtExePath.Text;
             NewGame.Notes = txtNotes.Text.Trim();
+
+            // === 【新增】將選取的遊玩狀態寫入 NewGame ===
+            NewGame.Status = cmbStatus.SelectedIndex switch
+            {
+                1 => PlayStatus.Playing,
+                2 => PlayStatus.Completed,
+                3 => PlayStatus.Wishlist,
+                _ => PlayStatus.Unplayed
+            };
 
             this.DialogResult = DialogResult.OK;
             this.Close();

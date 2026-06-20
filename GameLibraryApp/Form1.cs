@@ -35,6 +35,49 @@ namespace GameLibraryApp
 
         private bool isScaling = false;
 
+        // === 側欄項目定義 ===
+        // 索引 0-3：平台/收藏分類；索引 4：分隔線；索引 5-8：遊玩狀態分類
+        private static readonly string[] SidebarItems = new[]
+        {
+            " 🎮 所有遊戲庫",
+            " ⭐ 我的收藏夾",
+            " 🌐 Steam 專區",
+            " 🔞 DLsite 專區",
+            "─────────────",   // 分隔線（索引 4，不可選）
+            " 🏆 已通關",
+            " 🎮 正在玩",
+            " 📦 尚未遊玩",
+            " 💖 願望清單"
+        };
+        private const int SidebarSeparatorIndex = 4;
+
+        // 將側欄索引對應到 PlayStatus
+        private static readonly Dictionary<int, PlayStatus> SidebarStatusMap = new()
+        {
+            { 5, PlayStatus.Completed },
+            { 6, PlayStatus.Playing },
+            { 7, PlayStatus.Unplayed },
+            { 8, PlayStatus.Wishlist }
+        };
+
+        // 各狀態對應的顏色（用於 Badge 和側欄高亮）
+        private static readonly Dictionary<PlayStatus, Color> StatusColors = new()
+        {
+            { PlayStatus.Completed, Color.FromArgb(255, 215, 0) },    // 金色
+            { PlayStatus.Playing,   Color.FromArgb(76, 175, 80) },    // 綠色
+            { PlayStatus.Unplayed,  Color.FromArgb(120, 120, 120) },  // 灰色
+            { PlayStatus.Wishlist,  Color.FromArgb(255, 64, 129) }    // 粉紅
+        };
+
+        // 各狀態對應的顯示文字
+        private static readonly Dictionary<PlayStatus, string> StatusLabels = new()
+        {
+            { PlayStatus.Completed, "🏆 已通關" },
+            { PlayStatus.Playing,   "🎮 正在玩" },
+            { PlayStatus.Unplayed,  "📦 尚未遊玩" },
+            { PlayStatus.Wishlist,  "💖 願望清單" }
+        };
+
         public Form1()
         {
             InitializeComponent();
@@ -43,13 +86,24 @@ namespace GameLibraryApp
 
             btnAddGame.Click += BtnAddGame_Click;
             btnLaunch.Click += BtnLaunch_Click;
-            categoryListBox.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
+            categoryListBox.SelectedIndexChanged += CategoryListBox_SelectedIndexChanged;
             txtSearch.TextChanged += (s, e) => FilterAndRefreshGrid();
             cmbCircle.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
             cmbTag.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
             cmbSort.SelectedIndexChanged += (s, e) => FilterAndRefreshGrid();
 
             gamesFlowPanel.SizeChanged += (s, e) => CenterFlowPanelCards();
+        }
+
+        private void CategoryListBox_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            // 若點到分隔線，自動跳回前一個有效項目（預設跳回索引 0）
+            if (categoryListBox.SelectedIndex == SidebarSeparatorIndex)
+            {
+                categoryListBox.SelectedIndex = 0;
+                return;
+            }
+            FilterAndRefreshGrid();
         }
 
         private void SetupCustomUI()
@@ -70,17 +124,9 @@ namespace GameLibraryApp
                 ItemHeight = 45,
                 DrawMode = DrawMode.OwnerDrawFixed
             };
-            categoryListBox.Items.AddRange(new object[] { " 🎮 所有遊戲庫", " ⭐ 我的收藏夾", " 🌐 Steam 專區", " 🔞 DLsite 專區" });
+            categoryListBox.Items.AddRange(SidebarItems);
             categoryListBox.SelectedIndex = 0;
-            categoryListBox.DrawItem += (s, e) =>
-            {
-                if (e.Index < 0) return;
-                e.DrawBackground();
-                bool isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-                Brush textBrush = isSelected ? Brushes.White : new SolidBrush(Color.FromArgb(170, 170, 170));
-                if (isSelected) e.Graphics.FillRectangle(new SolidBrush(Color.FromArgb(255, 64, 129)), e.Bounds);
-                e.Graphics.DrawString(categoryListBox.Items[e.Index].ToString(), e.Font ?? this.Font, textBrush, e.Bounds.X + 5, e.Bounds.Y + 12);
-            };
+            categoryListBox.DrawItem += CategoryListBox_DrawItem;
             sidebarPanel.Controls.Add(categoryListBox);
 
             btnAddGame = new Button
@@ -162,13 +208,72 @@ namespace GameLibraryApp
 
             ToolStripMenuItem menuFav = new ToolStripMenuItem("⭐ 移入/移出收藏夾");
             menuFav.Click += (s, e) => { if (selectedGame != null) { selectedGame.IsFavorite = !selectedGame.IsFavorite; GameDataManager.SaveGames(allGames); FilterAndRefreshGrid(); } };
+
+            // === 【新增】更改遊玩狀態子選單 ===
+            ToolStripMenuItem menuStatus = new ToolStripMenuItem("📋 更改遊玩狀態");
+            var menuStatusCompleted = new ToolStripMenuItem("🏆 標記為已通關");
+            var menuStatusPlaying   = new ToolStripMenuItem("🎮 標記為正在玩");
+            var menuStatusUnplayed  = new ToolStripMenuItem("📦 標記為尚未遊玩");
+            var menuStatusWishlist  = new ToolStripMenuItem("💖 加入願望清單");
+
+            menuStatusCompleted.Click += (s, e) => SetSelectedGameStatus(PlayStatus.Completed);
+            menuStatusPlaying.Click   += (s, e) => SetSelectedGameStatus(PlayStatus.Playing);
+            menuStatusUnplayed.Click  += (s, e) => SetSelectedGameStatus(PlayStatus.Unplayed);
+            menuStatusWishlist.Click  += (s, e) => SetSelectedGameStatus(PlayStatus.Wishlist);
+
+            menuStatus.DropDownItems.AddRange(new ToolStripItem[]
+            {
+                menuStatusCompleted, menuStatusPlaying, menuStatusUnplayed, menuStatusWishlist
+            });
+
             ToolStripMenuItem menuDel = new ToolStripMenuItem("❌ 從資料庫永久移除");
             menuDel.Click += (s, e) => { if (selectedGame != null && MessageBox.Show("確定要將此遊戲移除館藏嗎？", "刪除確認", MessageBoxButtons.YesNo) == DialogResult.Yes) { allGames.Remove(selectedGame); GameDataManager.SaveGames(allGames); LoadGameData(); } };
 
-            gameContextMenu.Items.AddRange(new ToolStripItem[] { menuOpenFolder, new ToolStripSeparator(), menuFav, menuDel });
+            gameContextMenu.Items.AddRange(new ToolStripItem[] { menuOpenFolder, new ToolStripSeparator(), menuFav, menuStatus, new ToolStripSeparator(), menuDel });
 
             this.Controls.AddRange(new Control[] { gamesFlowPanel, topHeaderPanel, detailsPanel, sidebarPanel });
             gamesFlowPanel.BringToFront();
+        }
+
+        /// <summary>
+        /// 自訂側欄 ListBox 繪製：分隔線項目、狀態項目各用不同顏色
+        /// </summary>
+        private void CategoryListBox_DrawItem(object? sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+            e.DrawBackground();
+
+            string itemText = categoryListBox.Items[e.Index]?.ToString() ?? "";
+
+            // 分隔線：灰色橫線樣式，不可被選取
+            if (e.Index == SidebarSeparatorIndex)
+            {
+                int midY = e.Bounds.Y + e.Bounds.Height / 2;
+                e.Graphics.FillRectangle(new SolidBrush(Color.FromArgb(37, 37, 38)), e.Bounds);
+                e.Graphics.DrawLine(new Pen(Color.FromArgb(80, 80, 80), 1), e.Bounds.X + 10, midY, e.Bounds.Right - 10, midY);
+                return;
+            }
+
+            bool isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            bool isStatusItem = SidebarStatusMap.ContainsKey(e.Index);
+
+            if (isSelected)
+            {
+                // 選中狀態項目時，用對應狀態顏色高亮
+                Color highlightColor = isStatusItem
+                    ? StatusColors[SidebarStatusMap[e.Index]]
+                    : Color.FromArgb(255, 64, 129);
+                e.Graphics.FillRectangle(new SolidBrush(highlightColor), e.Bounds);
+                e.Graphics.DrawString(itemText, e.Font ?? this.Font, Brushes.White, e.Bounds.X + 5, e.Bounds.Y + 12);
+            }
+            else
+            {
+                // 未選中：狀態項目用其對應淡色，平台項目用預設灰色
+                Color textColor = isStatusItem
+                    ? StatusColors[SidebarStatusMap[e.Index]]
+                    : Color.FromArgb(170, 170, 170);
+                e.Graphics.DrawString(itemText, e.Font ?? this.Font, new SolidBrush(textColor), e.Bounds.X + 5, e.Bounds.Y + 12);
+            }
         }
 
         private void LoadGameData()
@@ -234,8 +339,14 @@ namespace GameLibraryApp
                         }
                         if (card.Controls["lblTime"] is Label lblTime)
                         {
-                            lblTime.Size = new Size(newCardWidth - 20, 15);
+                            lblTime.Size = new Size(newCardWidth - 60, 15);
                             lblTime.Location = new Point(10, newCoverHeight + 75);
+                        }
+                        // 調整狀態 Badge 位置至右下角
+                        if (card.Controls["lblStatus"] is Label lblStatus)
+                        {
+                            lblStatus.Size = new Size(newCardWidth - 10, 18);
+                            lblStatus.Location = new Point(5, newCoverHeight + 97);
                         }
                     }
                 }
@@ -259,9 +370,14 @@ namespace GameLibraryApp
 
             IEnumerable<GameItem> query = allGames;
             int sidebarIdx = categoryListBox.SelectedIndex;
+
+            // 平台/收藏篩選（索引 0-3）
             if (sidebarIdx == 1) query = query.Where(g => g.IsFavorite);
             else if (sidebarIdx == 2) query = query.Where(g => g.Platform == "Steam");
             else if (sidebarIdx == 3) query = query.Where(g => g.Platform == "DLsite");
+            // 遊玩狀態篩選（索引 5-8）
+            else if (SidebarStatusMap.ContainsKey(sidebarIdx))
+                query = query.Where(g => g.Status == SidebarStatusMap[sidebarIdx]);
 
             string searchTxt = txtSearch.Text.Trim().ToUpper();
             if (!string.IsNullOrEmpty(searchTxt))
@@ -325,7 +441,22 @@ namespace GameLibraryApp
                 };
 
                 Label lblCirc = new Label { Name = "lblCirc", Text = game.Circle, Size = new Size(190, 20), Location = new Point(10, 205), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.Gray };
-                Label lblTime = new Label { Name = "lblTime", Text = $"時數: {game.TotalPlayTime} 分鐘", Size = new Size(190, 15), Location = new Point(10, 225), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.FromArgb(3, 218, 198) };
+                Label lblTime = new Label { Name = "lblTime", Text = $"時數: {game.TotalPlayTime} 分鐘", Size = new Size(130, 15), Location = new Point(10, 225), Font = new Font("Microsoft JhengHei", 8), ForeColor = Color.FromArgb(3, 218, 198) };
+
+                // === 【新增】遊玩狀態 Badge ===
+                Color badgeColor = StatusColors[game.Status];
+                Label lblStatus = new Label
+                {
+                    Name = "lblStatus",
+                    Text = StatusLabels[game.Status],
+                    Size = new Size(200, 18),
+                    Location = new Point(5, 247),
+                    Font = new Font("Microsoft JhengHei", 7.5f, FontStyle.Bold),
+                    ForeColor = badgeColor,
+                    BackColor = Color.FromArgb(40, badgeColor.R, badgeColor.G, badgeColor.B),
+                    AutoSize = false,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
 
                 Action selectAction = () =>
                 {
@@ -335,8 +466,9 @@ namespace GameLibraryApp
 
                     string uiReleaseDate = (game.ReleaseDate == "1970-01-01") ? "未知" : game.ReleaseDate;
                     string displayTags = game.Tags.Count > 0 ? string.Join(", ", game.Tags) : "無標籤";
+                    string displayStatus = StatusLabels[game.Status];
 
-                    lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n遊戲標籤：\n{displayTags}\n\n個人備忘：\n{game.Notes}";
+                    lblNotes.Text = $"社團/廠商：{game.Circle}\n發售日期：{uiReleaseDate}\n最後遊玩：{(game.LastPlayed.HasValue ? game.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{game.TotalPlayTime} 分鐘\n\n遊玩狀態：{displayStatus}\n\n遊戲標籤：\n{displayTags}\n\n個人備忘：\n{game.Notes}";
                     btnLaunch.Visible = true;
                 };
 
@@ -349,13 +481,33 @@ namespace GameLibraryApp
                 card.MouseDown += (s, e) => { if (e.Button == MouseButtons.Right) selectedGame = game; };
                 pbCover.MouseDown += (s, e) => { if (e.Button == MouseButtons.Right) selectedGame = game; };
 
-                card.Controls.AddRange(new Control[] { pbCover, lblTitle, lblCirc, lblTime, lblCode });
+                card.Controls.AddRange(new Control[] { pbCover, lblTitle, lblCirc, lblTime, lblStatus, lblCode });
                 lblCode.BringToFront();
 
                 gamesFlowPanel.Controls.Add(card);
             }
 
             CenterFlowPanelCards();
+        }
+
+        /// <summary>
+        /// 透過右鍵選單更改選取遊戲的遊玩狀態，並儲存、刷新介面
+        /// </summary>
+        private void SetSelectedGameStatus(PlayStatus newStatus)
+        {
+            if (selectedGame == null) return;
+            selectedGame.Status = newStatus;
+            GameDataManager.SaveGames(allGames);
+            FilterAndRefreshGrid();
+
+            // 若右側詳情面板正在顯示此遊戲，即時更新狀態文字
+            if (lblGameTitle.Text == selectedGame.Title)
+            {
+                string displayStatus = StatusLabels[newStatus];
+                string uiReleaseDate = (selectedGame.ReleaseDate == "1970-01-01") ? "未知" : selectedGame.ReleaseDate;
+                string displayTags = selectedGame.Tags.Count > 0 ? string.Join(", ", selectedGame.Tags) : "無標籤";
+                lblNotes.Text = $"社團/廠商：{selectedGame.Circle}\n發售日期：{uiReleaseDate}\n最後遊玩：{(selectedGame.LastPlayed.HasValue ? selectedGame.LastPlayed.Value.ToString("yyyy/MM/dd HH:mm") : "從未遊玩")}\n總遊玩時數：{selectedGame.TotalPlayTime} 分鐘\n\n遊玩狀態：{displayStatus}\n\n遊戲標籤：\n{displayTags}\n\n個人備忘：\n{selectedGame.Notes}";
+            }
         }
 
         private async void DownloadImageAsync(GameItem game, PictureBox pb)

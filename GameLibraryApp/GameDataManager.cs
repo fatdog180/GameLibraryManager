@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace GameLibraryApp
 {
@@ -12,7 +13,9 @@ namespace GameLibraryApp
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
-            WriteIndented = true
+            WriteIndented = true,
+            // 讓 PlayStatus enum 以字串形式（"Unplayed", "Playing" 等）儲存，方便直接閱讀 JSON
+            Converters = { new JsonStringEnumConverter() }
         };
 
         /// <summary>
@@ -44,7 +47,7 @@ namespace GameLibraryApp
                 }
 
                 string jsonString = File.ReadAllText(FilePath);
-                return JsonSerializer.Deserialize<List<GameItem>>(jsonString) ?? new List<GameItem>();
+                return JsonSerializer.Deserialize<List<GameItem>>(jsonString, JsonOptions) ?? new List<GameItem>();
             }
             catch (Exception ex)
             {
