@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace GameLibraryApp
@@ -13,6 +14,7 @@ namespace GameLibraryApp
         private Panel sidebarPanel = null!;
         private ListBox categoryListBox = null!;
         private Button btnAddGame = null!;
+        private Button btnBatchImport = null!;
 
         private Panel topHeaderPanel = null!;
         private Label lblStats = null!;
@@ -34,6 +36,7 @@ namespace GameLibraryApp
         private GameItem? selectedGame = null;
 
         private bool isScaling = false;
+        private Panel pnlLoading = null!;
 
         // === 側欄項目定義 ===
         // 索引 0-3：平台/收藏分類；索引 4：分隔線；索引 5-8：遊玩狀態分類
@@ -82,9 +85,11 @@ namespace GameLibraryApp
         {
             InitializeComponent();
             SetupCustomUI();
+            InitializeLoadingPanel();
             LoadGameData();
 
             btnAddGame.Click += BtnAddGame_Click;
+            btnBatchImport.Click += BtnBatchImport_Click;
             btnLaunch.Click += BtnLaunch_Click;
             categoryListBox.SelectedIndexChanged += CategoryListBox_SelectedIndexChanged;
             txtSearch.TextChanged += (s, e) => FilterAndRefreshGrid();
@@ -141,7 +146,24 @@ namespace GameLibraryApp
                 Cursor = Cursors.Hand
             };
             btnAddGame.FlatAppearance.BorderSize = 0;
-            sidebarPanel.Controls.Add(btnAddGame);
+
+            btnBatchImport = new Button
+            {
+                Text = "📦 批量匯入",
+                Height = 50,
+                Dock = DockStyle.Bottom,
+                BackColor = Color.FromArgb(38, 90, 170),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Microsoft JhengHei", 11, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnBatchImport.FlatAppearance.BorderSize = 0;
+
+            // 加入順序決定 DockStyle.Bottom 停靠位置：後加入者優先度較高，停靠在最底部
+            // → btnBatchImport（先加，index+1）停靠在 btnAddGame（後加，index+2）上方
+            sidebarPanel.Controls.Add(btnBatchImport); // 上方
+            sidebarPanel.Controls.Add(btnAddGame);     // 最底部
 
             detailsPanel = new Panel { Width = 300, Dock = DockStyle.Right, BackColor = Color.FromArgb(30, 30, 30), Padding = new Padding(15) };
             lblGameTitle = new Label { Text = "未選擇遊戲", Font = new Font("Microsoft JhengHei", 15, FontStyle.Bold), ForeColor = Color.FromArgb(255, 64, 129), Dock = DockStyle.Top, Height = 60 };
@@ -364,8 +386,16 @@ namespace GameLibraryApp
             }
         }
 
-        private void FilterAndRefreshGrid()
+        private async void FilterAndRefreshGrid()
         {
+            if (pnlLoading != null)
+            {
+                pnlLoading.Visible = true;
+                pnlLoading.BringToFront();
+                await Task.Delay(20);
+            }
+
+            gamesFlowPanel.SuspendLayout();
             gamesFlowPanel.Controls.Clear();
 
             IEnumerable<GameItem> query = allGames;
@@ -400,6 +430,8 @@ namespace GameLibraryApp
             else if (sortIdx == 2) query = query.OrderBy(g => g.ReleaseDate);
             else if (sortIdx == 3) query = query.OrderByDescending(g => g.LastPlayed ?? DateTime.MinValue);
             else if (sortIdx == 4) query = query.OrderByDescending(g => g.TotalPlayTime);
+
+            List<Control> newCards = new List<Control>();
 
             foreach (var game in query)
             {
@@ -484,10 +516,14 @@ namespace GameLibraryApp
                 card.Controls.AddRange(new Control[] { pbCover, lblTitle, lblCirc, lblTime, lblStatus, lblCode });
                 lblCode.BringToFront();
 
-                gamesFlowPanel.Controls.Add(card);
+                newCards.Add(card);
             }
 
+            gamesFlowPanel.Controls.AddRange(newCards.ToArray());
             CenterFlowPanelCards();
+            gamesFlowPanel.ResumeLayout(true);
+
+            if (pnlLoading != null) pnlLoading.Visible = false;
         }
 
         /// <summary>
@@ -588,6 +624,52 @@ namespace GameLibraryApp
                     LoadGameData();
                 }
             }
+        }
+
+        private void BtnBatchImport_Click(object? sender, EventArgs e)
+        {
+            using var batchForm = new BatchImportForm(allGames);
+            if (batchForm.ShowDialog(this) == DialogResult.OK && batchForm.ImportedGames.Count > 0)
+            {
+                int added = 0;
+                foreach (var game in batchForm.ImportedGames)
+                {
+                    if (!allGames.Any(g => g.Code.Equals(game.Code, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        allGames.Add(game);
+                        added++;
+                    }
+                }
+                if (added > 0)
+                {
+                    GameDataManager.SaveGames(allGames);
+                    LoadGameData();
+                    MessageBox.Show($"🎮 成功批量匯入 {added} 款遊戲！", "匯入完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+        }
+
+        private void InitializeLoadingPanel()
+        {
+            pnlLoading = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(200, 18, 18, 18),
+                Visible = false
+            };
+            var lblLoading = new Label
+            {
+                Text = "Loading...",
+                Font = new Font("Segoe UI", 24, FontStyle.Bold),
+                ForeColor = Color.White,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent
+            };
+            pnlLoading.Controls.Add(lblLoading);
+            this.Controls.Add(pnlLoading);
+            pnlLoading.BringToFront();
         }
     }
 }
